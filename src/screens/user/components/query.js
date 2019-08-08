@@ -1,70 +1,86 @@
-import {Component} from 'react'
+import {useContext, useReducer, useEffect, useRef} from 'react'
 import PropTypes from 'prop-types'
 import isEqual from 'lodash/isEqual'
 import * as GitHub from '../../../github-client'
 
-class Query extends Component {
-  static propTypes = {
-    query: PropTypes.string.isRequired,
-    variables: PropTypes.object,
-    children: PropTypes.func.isRequired,
-    normalize: PropTypes.func,
-  }
-  static defaultProps = {
-    normalize: data => data,
-  }
-  static contextType = GitHub.Context
+function useSafeSetState(initialState) {
+  const reducer = (state, nextState) => ({...state, ...nextState})
+  const [state, setState] = useReducer(reducer, initialState)
+  const mountedRef = useRef(false)
 
-  state = {loaded: false, fetching: false, data: null, error: null}
+  useEffect(() => {
+    mountedRef.current = true
+    return () => (mountedRef.current = false)
+  }, [])
+  const safeSetState = (...args) => mountedRef.current && setState(...args)
 
-  componentDidMount() {
-    this._isMounted = true
-    this.query()
-  }
+  return [state, safeSetState]
+}
 
-  componentDidUpdate(prevProps) {
-    if (
-      !isEqual(this.props.query, prevProps.query) ||
-      !isEqual(this.props.variables, prevProps.variables)
-    ) {
-      this.query()
+function usePrevious(value) {
+  const ref = useRef()
+  useEffect(() => {
+    ref.current = value
+  })
+  return ref.current
+}
+
+function useDeepCompareEffect(callback, inputs) {
+  const cleanupRef = useRef()
+  useEffect(() => {
+    if (!isEqual(previousInputs, inputs)) {
+      cleanupRef.current = callback()
     }
-  }
+    return cleanupRef.current
+  })
+  const previousInputs = usePrevious(inputs)
+}
 
-  componentWillUnmount() {
-    this._isMounted = false
-  }
+function useQuery({query, variables, normalize = data => data}) {
+  const client = useContext(GitHub.Context)
+  const [state, setState] = useSafeSetState({
+    loaded: false,
+    fetching: false,
+    data: null,
+    error: null,
+  })
 
-  query() {
-    this.setState({fetching: true})
-    const client = this.context
-    client
-      .request(this.props.query, this.props.variables)
-      .then(res =>
-        this.safeSetState({
-          data: this.props.normalize(res),
-          error: null,
-          loaded: true,
-          fetching: false,
-        }),
-      )
-      .catch(error =>
-        this.safeSetState({
-          error,
-          data: null,
-          loaded: false,
-          fetching: false,
-        }),
-      )
-  }
+  useDeepCompareEffect(
+    () => {
+      setState({fetching: true})
+      client
+        .request(query, variables)
+        .then(res =>
+          setState({
+            data: normalize(res),
+            error: null,
+            loaded: true,
+            fetching: false,
+          }),
+        )
+        .catch(error =>
+          setState({
+            error,
+            data: null,
+            loaded: false,
+            fetching: false,
+          }),
+        )
+    },
+    [query, variables],
+  )
 
-  safeSetState(...args) {
-    this._isMounted && this.setState(...args)
-  }
+  return state
+}
 
-  render() {
-    return this.props.children(this.state)
-  }
+const Query = ({children, ...props}) => children(useQuery(props))
+
+Query.propTypes = {
+  query: PropTypes.string.isRequired,
+  variables: PropTypes.object,
+  children: PropTypes.func.isRequired,
+  normalize: PropTypes.func,
 }
 
 export default Query
+export {useQuery}
