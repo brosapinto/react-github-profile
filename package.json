@@ -16,8 +16,7 @@
     "react": "16.7.0-alpha.2",
     "react-cache": "2.0.0-alpha.1",
     "react-dom": "16.7.0-alpha.2",
-    "react-error-boundary": "1.2.3",
-    "react-loadable": "^5.5.0"
+    "react-error-boundary": "1.2.3"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -31,7 +30,7 @@
   },
   "husky": {
     "hooks": {
-      "pre-commit": "lint-staged && npm run build -s"
+      "pre-commit": "lint-staged"
     }
   },
   "eslintConfig": {
